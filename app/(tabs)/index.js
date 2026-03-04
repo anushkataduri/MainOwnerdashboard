@@ -3,6 +3,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useEffect, useRef, useState } from "react";
 import {
+  Animated,
   Dimensions,
   Image,
   KeyboardAvoidingView,
@@ -47,6 +48,8 @@ export default function BuildingScreen() {
   const [email, setEmail] = useState("");
   const [bedNumber, setBedNumber] = useState(1);
   const [monthlyRent, setMonthlyRent] = useState("");
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
   const [tenants, setTenants] = useState({});
   const [idProofFile, setIdProofFile] = useState("");
   const [idProofUri, setIdProofUri] = useState("");
@@ -56,13 +59,37 @@ export default function BuildingScreen() {
   const [previewUri, setPreviewUri] = useState("");
   const [showBottomViewId, setShowBottomViewId] = useState(false);
   const [previewScale, setPreviewScale] = useState(1);
+  const [editAll] = useState(false);
+  const [editValues, setEditValues] = useState({});
+  const [rowEditIndex, setRowEditIndex] = useState(null);
+  const [rowEditValues, setRowEditValues] = useState({});
+  const [tenantsExpanded, setTenantsExpanded] = useState(true);
   const onPinchStateChange = (e) => {
     if (e.nativeEvent.state === State.END) {
-      const scale = e.nativeEvent.scale ?? 1;
-      const next = Math.min(3, Math.max(1, previewScale * scale));
-      setPreviewScale(next);
+      setPreviewScale((prev) => Math.min(3, Math.max(1, prev)));
     }
   };
+  const floorPulse = useRef(new Animated.Value(0.8)).current;
+  const floorScale = floorPulse.interpolate({
+    inputRange: [0.8, 1],
+    outputRange: [0.99, 1.01],
+  });
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floorPulse, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floorPulse, {
+          toValue: 0.8,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [floorPulse]);
   const [touchedName, setTouchedName] = useState(false);
   const [touchedPhone, setTouchedPhone] = useState(false);
   const [touchedEmail, setTouchedEmail] = useState(false);
@@ -133,6 +160,8 @@ export default function BuildingScreen() {
     setContactNumber("");
     setEmail("");
     setMonthlyRent("");
+    setCheckIn("");
+    setCheckOut("");
     setIdProofFile("");
     setIdProofUri("");
     setIdPreviewHtml("");
@@ -177,6 +206,8 @@ export default function BuildingScreen() {
           email: email.trim(),
           bed: bedNumber,
           rent: monthlyRent.trim(),
+          checkIn: checkIn.trim(),
+          checkOut: checkOut.trim(),
           idUri: idOpenUri || idProofUri,
         },
       ];
@@ -317,7 +348,7 @@ export default function BuildingScreen() {
           }}
           showsHorizontalScrollIndicator={false}
           style={styles.slider}
-          contentContainerStyle={{ paddingHorizontal: SPACING }}
+          contentContainerStyle={{ paddingLeft: SPACING, paddingRight: 6 }}
           onMomentumScrollEnd={(e) => {
             const x = e.nativeEvent.contentOffset.x;
             const idx = Math.max(
@@ -347,7 +378,24 @@ export default function BuildingScreen() {
                 }
               }}
             >
-              <Text style={styles.floorTitle}>{item.floor}</Text>
+              <Animated.Text
+                style={[
+                  styles.floorTitle,
+                  { opacity: floorPulse, transform: [{ scale: floorScale }] },
+                  activeIndex === index && {
+                    color: "#0a7ea4",
+                    backgroundColor: "#E6F7ED",
+                    borderWidth: 1,
+                    borderColor: "#0a7ea4",
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 10,
+                    alignSelf: "center",
+                  },
+                ]}
+              >
+                {item.floor}
+              </Animated.Text>
               <ScrollView
                 style={styles.cardScroll}
                 nestedScrollEnabled
@@ -369,6 +417,7 @@ export default function BuildingScreen() {
                           backgroundColor: getTileColor(item.floor, room),
                         },
                       ]}
+                      onPress={() => openTenantModal(item.floor, room)}
                     >
                       {(() => {
                         const tileColor = getTileColor(item.floor, room);
@@ -451,87 +500,755 @@ export default function BuildingScreen() {
                   </View>
                 </View>
                 <View style={styles.modalSectionHeader}>
-                  <Text style={styles.modalSectionTitle}>Current Tenants</Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <Text style={styles.modalSectionTitle}>
+                      Current Tenants
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setTenantsExpanded((v) => !v)}
+                      style={{ padding: 6 }}
+                    >
+                      <Ionicons
+                        name={
+                          tenantsExpanded
+                            ? "chevron-up-outline"
+                            : "chevron-down-outline"
+                        }
+                        size={20}
+                        color="#111"
+                      />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={styles.currentTenantsBox}>
-                  {(tenants[`${selectedFloor}-${selectedRoom}`] ?? []).map(
-                    (t, idx) => (
-                      <View key={idx} style={styles.tenantRow}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.tenantName}>{t.name}</Text>
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                            }}
-                          >
-                            <Text style={styles.tenantMeta}>
-                              Bed {t.bed} ·{" "}
-                            </Text>
-                            <Ionicons
-                              name="call-outline"
-                              size={14}
-                              color="#2ECC71"
-                            />
-                            <Text
-                              style={[styles.tenantMeta, { marginLeft: 4 }]}
+                {tenantsExpanded && (
+                  <View style={styles.currentTenantsBox}>
+                    {(tenants[`${selectedFloor}-${selectedRoom}`] ?? []).map(
+                      (t, idx) => (
+                        <View key={idx} style={styles.tenantCard}>
+                          <View style={{ flex: 1 }}>
+                            {!(editAll || rowEditIndex === idx) ? (
+                              <Text style={styles.tenantName}>{t.name}</Text>
+                            ) : (
+                              <TextInput
+                                value={
+                                  editAll
+                                    ? (editValues[idx]?.name ?? t.name)
+                                    : (rowEditValues[idx]?.name ?? t.name)
+                                }
+                                onChangeText={(val) => {
+                                  const sanitized = val.replace(
+                                    /[^A-Za-z\s]/g,
+                                    "",
+                                  );
+                                  if (editAll) {
+                                    setEditValues((prev) => ({
+                                      ...prev,
+                                      [idx]: {
+                                        ...(prev[idx] || {}),
+                                        name: sanitized,
+                                      },
+                                    }));
+                                  } else {
+                                    setRowEditValues((prev) => ({
+                                      ...prev,
+                                      [idx]: {
+                                        ...(prev[idx] || {}),
+                                        name: sanitized,
+                                      },
+                                    }));
+                                  }
+                                }}
+                                placeholder="Name"
+                                style={[styles.input, { marginBottom: 6 }]}
+                                autoCapitalize="words"
+                                autoCorrect={false}
+                              />
+                            )}
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                              }}
                             >
-                              {t.phone}
-                            </Text>
-                            {!!t.rent && (
-                              <>
-                                <Text style={styles.tenantMeta}> · </Text>
-                                <Text
+                              {!(editAll || rowEditIndex === idx) ? (
+                                <>
+                                  <Text style={styles.tenantMeta}>
+                                    Bed {t.bed} ·{" "}
+                                  </Text>
+                                  <TouchableOpacity
+                                    onPress={() => {
+                                      const tel = `tel:${t.phone}`;
+                                      Linking.openURL(tel).catch(() => {});
+                                    }}
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <Ionicons
+                                      name="call-outline"
+                                      size={14}
+                                      color="#2ECC71"
+                                    />
+                                    <Text
+                                      style={[
+                                        styles.tenantMeta,
+                                        { marginLeft: 4 },
+                                      ]}
+                                    >
+                                      {t.phone}
+                                    </Text>
+                                  </TouchableOpacity>
+                                  {!!t.rent && (
+                                    <>
+                                      <Text style={styles.tenantMeta}> · </Text>
+                                      <Text
+                                        style={[
+                                          styles.tenantMeta,
+                                          { color: "#0a7ea4" },
+                                        ]}
+                                      >
+                                        ₹
+                                      </Text>
+                                      <Text
+                                        style={[
+                                          styles.tenantMeta,
+                                          { marginLeft: 4 },
+                                        ]}
+                                      >
+                                        {t.rent}
+                                      </Text>
+                                    </>
+                                  )}
+                                </>
+                              ) : (
+                                <View style={{ flex: 1 }}>
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 8,
+                                    }}
+                                  >
+                                    <Text style={styles.tenantMeta}>Bed</Text>
+                                    {(() => {
+                                      const key = `${selectedFloor}-${selectedRoom}`;
+                                      const list = tenants[key] ?? [];
+                                      const chosen = editAll
+                                        ? new Set(
+                                            list
+                                              .map((p, i) =>
+                                                i === idx
+                                                  ? null
+                                                  : (editValues[i]?.bed ??
+                                                    p.bed),
+                                              )
+                                              .filter((x) => !!x),
+                                          )
+                                        : new Set(
+                                            list
+                                              .map((p, i) =>
+                                                i === idx ? null : p.bed,
+                                              )
+                                              .filter((x) => !!x),
+                                          );
+                                      return [1, 2, 3, 4].map((b) => {
+                                        const active = editAll
+                                          ? (editValues[idx]?.bed ?? t.bed) ===
+                                            b
+                                          : (rowEditValues[idx]?.bed ??
+                                              t.bed) === b;
+                                        const disabled = chosen.has(b);
+                                        return (
+                                          <TouchableOpacity
+                                            key={b}
+                                            style={[
+                                              styles.bedBtn,
+                                              active && styles.bedBtnActive,
+                                              disabled && styles.bedBtnOccupied,
+                                            ]}
+                                            onPress={() => {
+                                              if (editAll) {
+                                                setEditValues((prev) => ({
+                                                  ...prev,
+                                                  [idx]: {
+                                                    ...(prev[idx] || {}),
+                                                    bed: b,
+                                                  },
+                                                }));
+                                              } else {
+                                                setRowEditValues((prev) => ({
+                                                  ...prev,
+                                                  [idx]: {
+                                                    ...(prev[idx] || {}),
+                                                    bed: b,
+                                                  },
+                                                }));
+                                              }
+                                            }}
+                                            disabled={disabled}
+                                          >
+                                            <Text
+                                              style={[
+                                                styles.bedBtnText,
+                                                active &&
+                                                  styles.bedBtnTextActive,
+                                                disabled &&
+                                                  styles.bedBtnTextOccupied,
+                                              ]}
+                                            >
+                                              {disabled ? "✓" : b}
+                                            </Text>
+                                          </TouchableOpacity>
+                                        );
+                                      });
+                                    })()}
+                                  </View>
+                                  <View style={{ marginTop: 6 }}>
+                                    <TextInput
+                                      value={
+                                        editAll
+                                          ? (editValues[idx]?.phone ?? t.phone)
+                                          : (rowEditValues[idx]?.phone ??
+                                            t.phone)
+                                      }
+                                      onChangeText={(val) => {
+                                        const digits = val
+                                          .replace(/[^0-9]/g, "")
+                                          .slice(0, 11);
+                                        if (editAll) {
+                                          setEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              phone: digits,
+                                            },
+                                          }));
+                                        } else {
+                                          setRowEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              phone: digits,
+                                            },
+                                          }));
+                                        }
+                                      }}
+                                      placeholder="Phone"
+                                      style={[
+                                        styles.input,
+                                        { marginBottom: 6 },
+                                      ]}
+                                      keyboardType="phone-pad"
+                                      maxLength={11}
+                                      autoCorrect={false}
+                                    />
+                                    <TextInput
+                                      value={
+                                        editAll
+                                          ? (editValues[idx]?.email ??
+                                            t.email ??
+                                            "")
+                                          : (rowEditValues[idx]?.email ??
+                                            t.email ??
+                                            "")
+                                      }
+                                      onChangeText={(val) => {
+                                        const v = val.trim();
+                                        if (editAll) {
+                                          setEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              email: v,
+                                            },
+                                          }));
+                                        } else {
+                                          setRowEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              email: v,
+                                            },
+                                          }));
+                                        }
+                                      }}
+                                      placeholder="Email (optional)"
+                                      style={[
+                                        styles.input,
+                                        { marginBottom: 6 },
+                                      ]}
+                                      keyboardType="email-address"
+                                      autoCapitalize="none"
+                                      autoCorrect={false}
+                                    />
+                                    <TextInput
+                                      value={
+                                        editAll
+                                          ? (editValues[idx]?.rent ??
+                                            t.rent ??
+                                            "")
+                                          : (rowEditValues[idx]?.rent ??
+                                            t.rent ??
+                                            "")
+                                      }
+                                      onChangeText={(val) => {
+                                        const digits = val.replace(
+                                          /[^0-9]/g,
+                                          "",
+                                        );
+                                        if (editAll) {
+                                          setEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              rent: digits,
+                                            },
+                                          }));
+                                        } else {
+                                          setRowEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              rent: digits,
+                                            },
+                                          }));
+                                        }
+                                      }}
+                                      placeholder="Monthly Rent"
+                                      style={[styles.input]}
+                                      keyboardType="numeric"
+                                      autoCorrect={false}
+                                    />
+                                  </View>
+                                </View>
+                              )}
+                            </View>
+                            {!(editAll || rowEditIndex === idx) &&
+                              (t.checkIn || t.checkOut) && (
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    flexWrap: "wrap",
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  {!!t.checkIn && (
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name="calendar-outline"
+                                        size={14}
+                                        color="#555"
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.tenantMeta,
+                                          { marginLeft: 4 },
+                                        ]}
+                                      >
+                                        In {t.checkIn}
+                                      </Text>
+                                    </View>
+                                  )}
+                                  {!!t.checkOut && (
+                                    <View
+                                      style={{
+                                        flexDirection: "row",
+                                        alignItems: "center",
+                                        marginLeft: 8,
+                                      }}
+                                    >
+                                      <Ionicons
+                                        name="calendar-outline"
+                                        size={14}
+                                        color="#555"
+                                      />
+                                      <Text
+                                        style={[
+                                          styles.tenantMeta,
+                                          { marginLeft: 4 },
+                                        ]}
+                                      >
+                                        Out {t.checkOut}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              )}
+
+                            {(editAll || rowEditIndex === idx) && (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  marginTop: 6,
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <TextInput
+                                  value={
+                                    editAll
+                                      ? (editValues[idx]?.in ?? t.checkIn ?? "")
+                                      : (rowEditValues[idx]?.in ??
+                                        t.checkIn ??
+                                        "")
+                                  }
+                                  onChangeText={(val) => {
+                                    const sanitized = val.replace(
+                                      /[^A-Za-z0-9\s/.\-:]/g,
+                                      "",
+                                    );
+                                    if (editAll) {
+                                      setEditValues((prev) => ({
+                                        ...prev,
+                                        [idx]: {
+                                          ...(prev[idx] || {}),
+                                          in: sanitized,
+                                        },
+                                      }));
+                                    } else {
+                                      setRowEditValues((prev) => ({
+                                        ...prev,
+                                        [idx]: {
+                                          ...(prev[idx] || {}),
+                                          in: sanitized,
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="Check-in (DD/MM/YY or DD-MM-YY)"
                                   style={[
-                                    styles.tenantMeta,
-                                    { color: "#0a7ea4" },
+                                    styles.input,
+                                    { flexBasis: "48%", flexGrow: 1 },
                                   ]}
+                                  keyboardType="default"
+                                  autoCorrect={false}
+                                  autoComplete="off"
+                                  textContentType="none"
+                                  importantForAutofill="no"
+                                />
+                                <TextInput
+                                  value={
+                                    editAll
+                                      ? (editValues[idx]?.out ??
+                                        t.checkOut ??
+                                        "")
+                                      : (rowEditValues[idx]?.out ??
+                                        t.checkOut ??
+                                        "")
+                                  }
+                                  onChangeText={(val) => {
+                                    const sanitized = val.replace(
+                                      /[^A-Za-z0-9\s/.\-:]/g,
+                                      "",
+                                    );
+                                    if (editAll) {
+                                      setEditValues((prev) => ({
+                                        ...prev,
+                                        [idx]: {
+                                          ...(prev[idx] || {}),
+                                          out: sanitized,
+                                        },
+                                      }));
+                                    } else {
+                                      setRowEditValues((prev) => ({
+                                        ...prev,
+                                        [idx]: {
+                                          ...(prev[idx] || {}),
+                                          out: sanitized,
+                                        },
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="Check-out (DD/MM/YY or DD-MM-YY)"
+                                  style={[
+                                    styles.input,
+                                    { flexBasis: "48%", flexGrow: 1 },
+                                  ]}
+                                  keyboardType="default"
+                                  autoCorrect={false}
+                                  autoComplete="off"
+                                  textContentType="none"
+                                  importantForAutofill="no"
+                                />
+                              </View>
+                            )}
+                            {rowEditIndex === idx && (
+                              <View style={{ width: "100%", marginTop: 8 }}>
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 8,
+                                    marginBottom: 8,
+                                  }}
                                 >
-                                  ₹
-                                </Text>
-                                <Text
-                                  style={[styles.tenantMeta, { marginLeft: 4 }]}
+                                  <TouchableOpacity
+                                    style={[
+                                      styles.viewBtn,
+                                      {
+                                        width: 60,
+                                        paddingVertical: 6,
+                                        paddingHorizontal: 8,
+                                      },
+                                    ]}
+                                    onPress={async () => {
+                                      const uri =
+                                        rowEditValues[idx]?.idUri ?? t.idUri;
+                                      if (uri) {
+                                        setIdPreviewVisible(true);
+                                        setPreviewUri(uri);
+                                        setShowBottomViewId(false);
+                                      }
+                                    }}
+                                  >
+                                    <Text style={styles.viewBtnText}>ID</Text>
+                                  </TouchableOpacity>
+                                  <TouchableOpacity
+                                    style={[styles.smallBtn]}
+                                    onPress={async () => {
+                                      try {
+                                        const result =
+                                          await DocumentPicker.getDocumentAsync(
+                                            {
+                                              type: [
+                                                "image/*",
+                                                "application/pdf",
+                                              ],
+                                              multiple: false,
+                                              copyToCacheDirectory: true,
+                                            },
+                                          );
+                                        let uri = null;
+                                        if (
+                                          result?.assets &&
+                                          result.assets.length > 0
+                                        ) {
+                                          uri = result.assets[0].uri || null;
+                                        } else if (result?.uri) {
+                                          uri = result.uri;
+                                        }
+                                        if (uri) {
+                                          setRowEditValues((prev) => ({
+                                            ...prev,
+                                            [idx]: {
+                                              ...(prev[idx] || {}),
+                                              idUri: uri,
+                                            },
+                                          }));
+                                        }
+                                      } catch (_) {}
+                                    }}
+                                  >
+                                    <Text style={styles.smallBtnText}>
+                                      Change ID
+                                    </Text>
+                                  </TouchableOpacity>
+                                </View>
+                                {(() => {
+                                  const key = `${selectedFloor}-${selectedRoom}`;
+                                  const list = tenants[key] ?? [];
+                                  const v = rowEditValues[idx] || {};
+                                  const nm = v.name ?? t.name;
+                                  const ph = v.phone ?? t.phone;
+                                  const em = v.email ?? t.email ?? "";
+                                  const bd = v.bed ?? t.bed;
+                                  const used = new Set(
+                                    list
+                                      .map((p, i) => (i === idx ? null : p.bed))
+                                      .filter((x) => !!x),
+                                  );
+                                  const valid =
+                                    /^[A-Za-z\s]+$/.test((nm || "").trim()) &&
+                                    /^\d{10,11}$/.test((ph || "").trim()) &&
+                                    ((em || "").trim().length === 0 ||
+                                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                        (em || "").trim(),
+                                      )) &&
+                                    bd >= 1 &&
+                                    bd <= 4 &&
+                                    !used.has(bd);
+                                  return (
+                                    <View
+                                      style={{ flexDirection: "row", gap: 8 }}
+                                    >
+                                      <TouchableOpacity
+                                        style={[
+                                          styles.smallBtn,
+                                          !valid && { opacity: 0.5 },
+                                          { flex: 1 },
+                                        ]}
+                                        disabled={!valid}
+                                        onPress={() => {
+                                          const updated = list.map((p, i) => {
+                                            if (i !== idx) return p;
+                                            const vv = rowEditValues[idx] || {};
+                                            return {
+                                              ...p,
+                                              name: (vv.name ?? p.name).trim(),
+                                              phone: (
+                                                vv.phone ?? p.phone
+                                              ).trim(),
+                                              email: (
+                                                vv.email ??
+                                                p.email ??
+                                                ""
+                                              ).trim(),
+                                              bed: vv.bed ?? p.bed,
+                                              rent: (
+                                                vv.rent ??
+                                                p.rent ??
+                                                ""
+                                              ).trim(),
+                                              checkIn: (
+                                                vv.in ??
+                                                p.checkIn ??
+                                                ""
+                                              ).trim(),
+                                              checkOut: (
+                                                vv.out ??
+                                                p.checkOut ??
+                                                ""
+                                              ).trim(),
+                                              idUri: vv.idUri ?? p.idUri,
+                                            };
+                                          });
+                                          setTenants((prev) => ({
+                                            ...prev,
+                                            [key]: updated,
+                                          }));
+                                          setRowEditIndex(null);
+                                          setRowEditValues({});
+                                        }}
+                                      >
+                                        <Text style={styles.smallBtnText}>
+                                          Save
+                                        </Text>
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        style={[
+                                          styles.smallBtn,
+                                          {
+                                            backgroundColor: "#E5E7EB",
+                                            borderColor: "#E5E7EB",
+                                            flex: 1,
+                                          },
+                                        ]}
+                                        onPress={() => {
+                                          setRowEditIndex(null);
+                                          setRowEditValues({});
+                                        }}
+                                      >
+                                        <Text
+                                          style={[
+                                            styles.smallBtnText,
+                                            { color: "#374151" },
+                                          ]}
+                                        >
+                                          Cancel
+                                        </Text>
+                                      </TouchableOpacity>
+                                      <TouchableOpacity
+                                        onPress={() =>
+                                          removeTenant(
+                                            selectedFloor,
+                                            selectedRoom,
+                                            idx,
+                                          )
+                                        }
+                                        style={{
+                                          marginLeft: 8,
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                        }}
+                                      >
+                                        <Ionicons
+                                          name="trash-outline"
+                                          size={20}
+                                          color="#E74C3C"
+                                        />
+                                      </TouchableOpacity>
+                                    </View>
+                                  );
+                                })()}
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.actionCol}>
+                            {rowEditIndex !== idx ? (
+                              <>
+                                <TouchableOpacity
+                                  style={[
+                                    styles.smallBtn,
+                                    { height: 28, alignSelf: "stretch" },
+                                  ]}
+                                  onPress={() => {
+                                    setRowEditIndex(idx);
+                                    setRowEditValues((prev) => ({
+                                      ...prev,
+                                      [idx]: {
+                                        name: t.name || "",
+                                        phone: t.phone || "",
+                                        email: t.email || "",
+                                        bed: t.bed,
+                                        rent: t.rent || "",
+                                        in: t.checkIn || "",
+                                        out: t.checkOut || "",
+                                        idUri: t.idUri || "",
+                                      },
+                                    }));
+                                  }}
                                 >
-                                  {t.rent}
-                                </Text>
+                                  <Text style={styles.smallBtnText}>Edit</Text>
+                                </TouchableOpacity>
+                                <View style={{ flex: 1 }} />
+                                <TouchableOpacity
+                                  onPress={() =>
+                                    removeTenant(
+                                      selectedFloor,
+                                      selectedRoom,
+                                      idx,
+                                    )
+                                  }
+                                  style={{
+                                    alignSelf: "center",
+                                    marginTop: 8,
+                                    marginBottom: 10,
+                                  }}
+                                >
+                                  <Ionicons
+                                    name="trash-outline"
+                                    size={22}
+                                    color="#E74C3C"
+                                  />
+                                </TouchableOpacity>
                               </>
+                            ) : (
+                              <></>
                             )}
                           </View>
                         </View>
-                        {!!t.idUri && (
-                          <TouchableOpacity
-                            style={[
-                              styles.viewBtn,
-                              { width: 60, marginTop: 0, marginRight: 6 },
-                            ]}
-                            onPress={async () => {
-                              setIdPreviewVisible(true);
-                              setPreviewUri(t.idUri);
-                              setShowBottomViewId(false);
-                            }}
-                          >
-                            <Text style={styles.viewBtnText}>ID</Text>
-                          </TouchableOpacity>
-                        )}
-                        <TouchableOpacity
-                          onPress={() =>
-                            removeTenant(selectedFloor, selectedRoom, idx)
-                          }
-                        >
-                          <Ionicons
-                            name="trash-outline"
-                            size={20}
-                            color="#E74C3C"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ),
-                  )}
-                  {(tenants[`${selectedFloor}-${selectedRoom}`] ?? [])
-                    .length === 0 && (
-                    <Text style={styles.emptyTenants}>No tenants</Text>
-                  )}
-                </View>
+                      ),
+                    )}
+                    {(tenants[`${selectedFloor}-${selectedRoom}`] ?? [])
+                      .length === 0 && (
+                      <Text style={styles.emptyTenants}>No tenants</Text>
+                    )}
+                  </View>
+                )}
                 <View style={styles.modalSectionHeader}>
                   <Text style={styles.modalSectionTitle}>Add New Tenant</Text>
                 </View>
@@ -733,25 +1450,36 @@ export default function BuildingScreen() {
                 <View style={styles.modalRow}>
                   <Text style={styles.modalLabel}>Select Bed</Text>
                   <View style={styles.bedPickerRow}>
-                    {[1, 2, 3, 4].map((b) => (
-                      <TouchableOpacity
-                        key={b}
-                        style={[
-                          styles.bedBtn,
-                          bedNumber === b && styles.bedBtnActive,
-                        ]}
-                        onPress={() => setBedNumber(b)}
-                      >
-                        <Text
-                          style={[
-                            styles.bedBtnText,
-                            bedNumber === b && styles.bedBtnTextActive,
-                          ]}
-                        >
-                          {b}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                    {(() => {
+                      const occ = (
+                        tenants[`${selectedFloor}-${selectedRoom}`] ?? []
+                      ).map((x) => x.bed);
+                      return [1, 2, 3, 4].map((b) => {
+                        const isOcc = occ.includes(b);
+                        return (
+                          <TouchableOpacity
+                            key={b}
+                            style={[
+                              styles.bedBtn,
+                              bedNumber === b && styles.bedBtnActive,
+                              isOcc && styles.bedBtnOccupied,
+                            ]}
+                            onPress={() => setBedNumber(b)}
+                            disabled={isOcc}
+                          >
+                            <Text
+                              style={[
+                                styles.bedBtnText,
+                                bedNumber === b && styles.bedBtnTextActive,
+                                isOcc && styles.bedBtnTextOccupied,
+                              ]}
+                            >
+                              {isOcc ? "✓" : b}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      });
+                    })()}
                   </View>
                 </View>
                 <View style={styles.modalRow}>
@@ -772,6 +1500,34 @@ export default function BuildingScreen() {
                     ]}
                     placeholder="Monthly Rent"
                     keyboardType="numeric"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    textContentType="none"
+                    importantForAutofill="no"
+                  />
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Check-in Date</Text>
+                  <TextInput
+                    value={checkIn}
+                    onChangeText={(t) => setCheckIn(t.replace(/[^\d/-]/g, ""))}
+                    style={styles.input}
+                    placeholder="DD/MM/YY "
+                    keyboardType="default"
+                    autoCorrect={false}
+                    autoComplete="off"
+                    textContentType="none"
+                    importantForAutofill="no"
+                  />
+                </View>
+                <View style={styles.modalRow}>
+                  <Text style={styles.modalLabel}>Check-out Date</Text>
+                  <TextInput
+                    value={checkOut}
+                    onChangeText={(t) => setCheckOut(t.replace(/[^\d/-]/g, ""))}
+                    style={styles.input}
+                    placeholder="DD/MM/YY "
+                    keyboardType="default"
                     autoCorrect={false}
                     autoComplete="off"
                     textContentType="none"
@@ -828,8 +1584,9 @@ export default function BuildingScreen() {
             <PinchGestureHandler
               onGestureEvent={(e) => {
                 const scale = e.nativeEvent.scale ?? 1;
-                const next = Math.min(3, Math.max(1, scale));
-                setPreviewScale(next);
+                setPreviewScale((prev) =>
+                  Math.min(3, Math.max(1, prev * scale)),
+                );
               }}
               onHandlerStateChange={onPinchStateChange}
             >
@@ -847,7 +1604,10 @@ export default function BuildingScreen() {
                               "https://docs.google.com/gview?embedded=true&url=" +
                               encodeURIComponent(previewUri),
                           }}
-                          style={{ width: "100%", height: 360 }}
+                          style={{
+                            width: "100%",
+                            height: Math.round(360 * previewScale),
+                          }}
                           originWhitelist={["*"]}
                         />
                       ) : (
@@ -877,13 +1637,19 @@ export default function BuildingScreen() {
                     ) : idPreviewHtml ? (
                       <WebView
                         source={{ html: idPreviewHtml }}
-                        style={{ width: "100%", height: 360 }}
+                        style={{
+                          width: "100%",
+                          height: Math.round(360 * previewScale),
+                        }}
                         originWhitelist={["*"]}
                       />
                     ) : (
                       <WebView
                         source={{ uri: previewUri }}
-                        style={{ width: "100%", height: 360 }}
+                        style={{
+                          width: "100%",
+                          height: Math.round(360 * previewScale),
+                        }}
                         originWhitelist={["*"]}
                       />
                     )
@@ -958,6 +1724,18 @@ const styles = StyleSheet.create({
   sideButtonTextActive: {
     color: "#fff",
   },
+  sideBarProgress: {
+    width: "100%",
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#E5E7EB",
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  sideBarProgressFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -1028,11 +1806,12 @@ const styles = StyleSheet.create({
   },
 
   floorTitle: {
-    marginTop: 8,
+    marginTop: 0,
     marginBottom: 8,
     fontWeight: "700",
     color: "#222",
-    fontSize: 18,
+    fontSize: 16,
+    textAlign: "center",
   },
   legendRow: {
     flexDirection: "row",
@@ -1156,6 +1935,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#F9FAFB",
   },
+  previewZoom: {},
   modalHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1239,12 +2019,20 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a7ea4",
     borderColor: "#0a7ea4",
   },
+  bedBtnOccupied: {
+    backgroundColor: "#E6F0F7",
+    borderColor: "#9BBBD6",
+  },
   bedBtnText: {
     color: "#333",
     fontWeight: "600",
   },
   bedBtnTextActive: {
     color: "#fff",
+  },
+  bedBtnTextOccupied: {
+    color: "#0a7ea4",
+    fontWeight: "700",
   },
   addBtn: {
     marginTop: 12,
@@ -1255,6 +2043,21 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     color: "#fff",
+    fontWeight: "700",
+  },
+  smallBtn: {
+    height: 30,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#0a7ea4",
+    backgroundColor: "#0a7ea4",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smallBtnText: {
+    color: "#fff",
+    fontSize: 12,
     fontWeight: "700",
   },
   zoomOverlay: {
@@ -1307,19 +2110,46 @@ const styles = StyleSheet.create({
     color: "#111",
   },
   currentTenantsBox: {
+    borderWidth: 0,
+    padding: 0,
+    backgroundColor: "#F9FAFB",
+    marginBottom: 12,
+    gap: 8,
+  },
+  tenantCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    padding: 10,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#eee",
     borderRadius: 10,
-    padding: 10,
-    backgroundColor: "#F9FAFB",
-    marginBottom: 12,
+    marginHorizontal: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
   },
   tenantRow: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    alignItems: "flex-start",
+    padding: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#eee",
+    borderRadius: 10,
+    marginHorizontal: 6,
+    marginBottom: 0,
+    shadowColor: "#000",
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  actionCol: {
+    marginLeft: 6,
+    alignItems: "stretch",
+    justifyContent: "flex-start",
+    width: 80,
   },
   tenantName: {
     fontWeight: "600",

@@ -8,16 +8,20 @@ import {
   TextInput,
   SafeAreaView,
   Modal,
-  Linking,
   ScrollView,
   Image,
 } from "react-native";
+import COLORS from "../../constants/colors";
+
+/* ---------- STATUS COLORS ---------- */
 
 const STATUS_COLORS = {
-  Pending: "#F59E0B",
-  "In Progress": "#3B82F6",
-  Completed: "#10B981",
+  Pending: COLORS.WARNING,
+  "In Progress": COLORS.INFO,
+  Completed: COLORS.SUCCESS,
 };
+
+/* ---------- SAMPLE DATA ---------- */
 
 const initialIssues = [
   {
@@ -32,10 +36,8 @@ const initialIssues = [
     status: "Pending",
     date: "Feb 25, 2026",
     description: "Water leaking from ceiling near shower area.",
-    images: [
-      // require("./assets/images/waterleak-image.png"),
-    ],
-     ownerComment: "", 
+    images: [],
+    ownerComment: "",
   },
   {
     id: "2",
@@ -50,10 +52,8 @@ const initialIssues = [
     date: "Feb 26, 2026",
     description:
       "Bedroom AC is not cooling properly and makes loud noise.",
-    images: [
-      // require("../assets/images/fan-image.png"),
-
-    ],
+    images: [],
+    ownerComment: "",
   },
 ];
 
@@ -62,10 +62,12 @@ export default function OwnerIssuesScreen() {
   const [issues, setIssues] = useState(initialIssues);
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
-const [ownerComment, setOwnerComment] = useState("");
+  const [ownerComment, setOwnerComment] = useState("");
+  const [activeFilter, setActiveFilter] = useState("All");
 
   const openDetails = (item) => {
     setSelectedIssue(item);
+    setOwnerComment(item.ownerComment || "");
     setModalVisible(true);
   };
 
@@ -78,25 +80,71 @@ const [ownerComment, setOwnerComment] = useState("");
     setSelectedIssue({ ...selectedIssue, status });
   };
 
-  const filteredIssues = issues.filter((item) =>
-    item.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleUpdate = () => {
+    setIssues((prev) =>
+      prev.map((item) =>
+        item.id === selectedIssue.id
+          ? { ...item, ownerComment }
+          : item
+      )
+    );
+    setModalVisible(false);
+  };
 
-  
+  /* ---------- FILTER LOGIC ---------- */
+
+  const filteredIssues = issues.filter((item) => {
+    const matchesSearch = item.title
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+    const matchesStatus =
+      activeFilter === "All" || item.status === activeFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.pageTitle}>Issues & Complaints</Text>
 
-      {/* SUMMARY */}
+      {/* SUMMARY FILTER */}
       <View style={styles.summaryRow}>
-        {["Pending", "In Progress", "Completed"].map((status) => (
-          <SummaryCard
-            key={status}
-            label={status === "Completed" ? "Resolved" : status}
-            count={issues.filter((i) => i.status === status).length}
-            color={STATUS_COLORS[status]}
-          />
-        ))}
+        {[ "Pending", "In Progress", "Completed"].map(
+          (status) => {
+            const isActive = activeFilter === status;
+
+            const color =
+              status === "All"
+                ? COLORS.PRIMARY
+                : STATUS_COLORS[status];
+
+            const count =
+              status === "All"
+                ? issues.length
+                : issues.filter((i) => i.status === status)
+                    .length;
+
+            return (
+              <TouchableOpacity
+                key={status}
+                style={{ flex: 1 }}
+                onPress={() => setActiveFilter(status)}
+              >
+                <SummaryCard
+                  label={
+                    status === "Completed"
+                      ? "Resolved"
+                      : status
+                  }
+                  count={count}
+                  color={color}
+                  isActive={isActive}
+                />
+              </TouchableOpacity>
+            );
+          }
+        )}
       </View>
 
       <Text style={styles.sectionHeader}>Tenant Issues</Text>
@@ -136,7 +184,6 @@ const [ownerComment, setOwnerComment] = useState("");
               {selectedIssue.title}
             </Text>
 
-            {/* DETAILS CARD */}
             <View style={styles.detailCard}>
               <Detail label="Tenant" value={selectedIssue.tenant} />
               <Detail label="Flat" value={selectedIssue.flat} />
@@ -146,92 +193,75 @@ const [ownerComment, setOwnerComment] = useState("");
                 label="Supervisor Phone"
                 value={selectedIssue.supervisorPhone}
               />
-
               <View style={styles.divider} />
-
               <Detail label="Date" value={selectedIssue.date} />
               <Detail label="Priority" value={selectedIssue.priority} />
             </View>
 
-            {/* DESCRIPTION */}
             <View style={styles.descCard}>
               <Text style={styles.descTitle}>Description</Text>
               <Text style={styles.descText}>
                 {selectedIssue.description}
               </Text>
             </View>
-            {/* IMAGES */}
-{selectedIssue.images.length > 0 && (
-  <ScrollView
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    style={{ marginBottom: 20 }}
-  >
-    {selectedIssue.images.map((img, index) => (
-      <Image
-        key={index}
-        source={img}
-        style={styles.issueImage}
-      />
-    ))}
-  </ScrollView>
-)}
 
-            {/* UPDATE STATUS */}
             <View style={styles.detailCard}>
               <Text style={styles.updateTitle}>Update Status</Text>
-
               <View style={styles.statusRow}>
-                {["Pending", "In Progress", "Completed"].map((status) => {
-                  const isSelected =
-                    selectedIssue.status === status;
-                  const color = STATUS_COLORS[status];
+                {["Pending", "In Progress", "Completed"].map(
+                  (status) => {
+                    const isSelected =
+                      selectedIssue.status === status;
+                    const color = STATUS_COLORS[status];
 
-                  return (
-                    <TouchableOpacity
-                      key={status}
-                      onPress={() => updateStatus(status)}
-                      style={[
-                        styles.statusBtn,
-                        {
-                          borderColor: color,
-                          backgroundColor: isSelected
-                            ? `${color}15`
-                            : "#fff",
-                        },
-                      ]}
-                    >
-                      <Text
+                    return (
+                      <TouchableOpacity
+                        key={status}
+                        onPress={() => updateStatus(status)}
                         style={[
-                          styles.statusText,
-                          { color },
+                          styles.statusBtn,
+                          {
+                            borderColor: color,
+                            backgroundColor: isSelected
+                              ? `${color}20`
+                              : COLORS.WHITE,
+                          },
                         ]}
                       >
-                        {status}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Text
+                          style={[
+                            styles.statusText,
+                            { color },
+                          ]}
+                        >
+                          {status}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                )}
               </View>
             </View>
 
-{/* OWNER COMMENT */}
-<View style={styles.detailCard}>
-  <Text style={styles.updateTitle}>Owner Comment</Text>
+            <View style={styles.detailCard}>
+              <Text style={styles.updateTitle}>
+                Owner Comment
+              </Text>
 
-  <TextInput
-    placeholder="Write a comment for tenant..."
-    multiline
-    value={ownerComment}
-    onChangeText={setOwnerComment}
-    style={styles.commentInput}
-  />
-</View>
+              <TextInput
+                placeholder="Write a comment for tenant..."
+                multiline
+                value={ownerComment}
+                onChangeText={setOwnerComment}
+                style={styles.commentInput}
+              />
+            </View>
+
             <TouchableOpacity
               style={styles.closeBtn}
-              onPress={() => setModalVisible(false)}
+              onPress={handleUpdate}
             >
-              <Text style={{ color: "#fff", fontWeight: "600" }}>
+              <Text style={styles.updateBtnText}>
                 Update
               </Text>
             </TouchableOpacity>
@@ -247,8 +277,18 @@ const [ownerComment, setOwnerComment] = useState("");
 const StatusBadge = ({ status }) => {
   const color = STATUS_COLORS[status];
   return (
-    <View style={[styles.statusBadge, { backgroundColor: color }]}>
-      <Text style={styles.badgeText}>{status}</Text>
+    <View
+      style={[
+        styles.statusBadge,
+        {
+          backgroundColor: `${color}20`,
+          borderColor: color,
+        },
+      ]}
+    >
+      <Text style={[styles.badgeText, { color }]}>
+        {status}
+      </Text>
     </View>
   );
 };
@@ -260,10 +300,34 @@ const Detail = ({ label, value }) => (
   </View>
 );
 
-const SummaryCard = ({ label, count, color }) => (
-  <View style={[styles.summaryCard, { borderColor: color }]}>
-    <Text style={[styles.summaryCount, { color }]}>{count}</Text>
-    <Text style={styles.summaryLabel}>{label}</Text>
+const SummaryCard = ({
+  label,
+  count,
+  color,
+  isActive,
+}) => (
+  <View
+    style={[
+      styles.summaryCard,
+      {
+        borderColor: color,
+        backgroundColor: isActive
+          ? `${color}25`
+          : `${color}10`,
+      },
+    ]}
+  >
+    <Text style={[styles.summaryCount, { color }]}>
+      {count}
+    </Text>
+    <Text
+      style={[
+        styles.summaryLabel,
+        { color: isActive ? color : COLORS.TEXT_SECONDARY },
+      ]}
+    >
+      {label}
+    </Text>
   </View>
 );
 
@@ -272,14 +336,14 @@ const SummaryCard = ({ label, count, color }) => (
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: COLORS.BACKGROUND,
     padding: 16,
   },
 
   pageTitle: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#111827",
+    color: COLORS.PRIMARY,
     marginBottom: 16,
     marginTop: 40,
   },
@@ -288,33 +352,36 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     marginVertical: 12,
-    color: "#111827",
+    color: COLORS.TEXT_PRIMARY,
   },
 
   search: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.WHITE,
     padding: 14,
     borderRadius: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
   },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.WHITE,
     padding: 18,
     borderRadius: 20,
     marginBottom: 16,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
   },
 
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#111827",
+    color: COLORS.TEXT_PRIMARY,
   },
 
   sub: {
     fontSize: 14,
-    color: "#6B7280",
+    color: COLORS.TEXT_SECONDARY,
     marginVertical: 6,
   },
 
@@ -324,23 +391,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
-  date: { fontSize: 13, color: "#9CA3AF" },
+  date: {
+    fontSize: 13,
+    color: COLORS.TEXT_LIGHT,
+  },
 
   statusBadge: {
     paddingHorizontal: 14,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
+    borderWidth: 1,
   },
 
   badgeText: {
-    color: "#fff",
     fontSize: 12,
     fontWeight: "600",
   },
 
   modal: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: COLORS.BACKGROUND,
     padding: 20,
   },
 
@@ -348,15 +418,16 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "800",
     marginBottom: 18,
-    color: "#111827",
+    color: COLORS.TEXT_PRIMARY,
   },
 
   detailCard: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.WHITE,
     padding: 22,
     borderRadius: 20,
     marginBottom: 20,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
   },
 
   detailRow: {
@@ -367,53 +438,49 @@ const styles = StyleSheet.create({
 
   label: {
     fontSize: 15,
-    color: "#6B7280",
+    color: COLORS.TEXT_SECONDARY,
     fontWeight: "500",
   },
 
   value: {
     fontSize: 16,
-    color: "#111827",
+    color: COLORS.TEXT_PRIMARY,
     fontWeight: "600",
   },
 
   divider: {
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: COLORS.DIVIDER,
     marginVertical: 10,
   },
 
   descCard: {
-    backgroundColor: "#fff",
+    backgroundColor: COLORS.WHITE,
     padding: 20,
     borderRadius: 20,
     marginBottom: 20,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
   },
 
   descTitle: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 8,
+    color: COLORS.TEXT_PRIMARY,
   },
 
   descText: {
     fontSize: 16,
-    color: "#4B5563",
+    color: COLORS.TEXT_SECONDARY,
     lineHeight: 22,
-  },issueImage: {
-  width: 260,
-  height: 170,
-  borderRadius: 20,
-  marginRight: 14,
-  resizeMode: "cover",
-  // backgroundColor:"#ffffff",
-},
+  },
 
   updateTitle: {
     fontSize: 18,
     fontWeight: "700",
     marginBottom: 14,
+    color: COLORS.TEXT_PRIMARY,
   },
 
   statusRow: {
@@ -433,22 +500,32 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 14,
     fontWeight: "600",
-  },commentInput: {
-  backgroundColor: "#F3F4F6",
-  borderRadius: 16,
-  padding: 14,
-  minHeight: 90,
-  textAlignVertical: "top",
-  fontSize: 14,
-},
+  },
+
+  commentInput: {
+    backgroundColor: COLORS.CARD,
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 90,
+    textAlignVertical: "top",
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
 
   closeBtn: {
-    backgroundColor: "#EF4444",
+    backgroundColor: COLORS.PRIMARY,
     padding: 16,
     borderRadius: 18,
     alignItems: "center",
     marginTop: 10,
-    marginBottom:90,
+    marginBottom: 90,
+  },
+
+  updateBtnText: {
+    color: COLORS.WHITE,
+    fontWeight: "600",
+    fontSize: 16,
   },
 
   summaryRow: {
@@ -458,8 +535,6 @@ const styles = StyleSheet.create({
   },
 
   summaryCard: {
-    flex: 1,
-    backgroundColor: "#fff",
     borderRadius: 20,
     paddingVertical: 16,
     alignItems: "center",
@@ -475,6 +550,6 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: 13,
     marginTop: 6,
-    color: "#6B7280",
+    color: COLORS.TEXT_SECONDARY,
   },
 });
