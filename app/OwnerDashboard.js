@@ -1,0 +1,44 @@
+import React from "react";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+
+import Home from "./Home";
+import Fee from "./fee";
+import Issues from "./issuesScreen";
+import Profile from "./profile";
+
+const Tab = createBottomTabNavigator();
+
+export default function OwnerDashboard() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: "#6C4AB6",
+        tabBarInactiveTintColor: "gray",
+        tabBarStyle: {
+          height: 65,
+          paddingBottom: 8,
+          paddingTop: 8,
+          backgroundColor: "#fff",
+        },
+
+        tabBarIcon: ({ color, size }) => {
+          let iconName;
+
+          if (route.name === "Home") iconName = "home-outline";
+          else if (route.name === "Fee") iconName = "card-outline";
+          else if (route.name === "Issues") iconName = "warning-outline";
+          else if (route.name === "Profile") iconName = "person-outline";
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tab.Screen name="Home" component={Home} />
+      <Tab.Screen name="Fee" component={Fee} />
+      <Tab.Screen name="Issues" component={Issues} />
+      <Tab.Screen name="Profile" component={Profile} />
+    </Tab.Navigator>
+  );
+}
