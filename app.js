@@ -1,11 +1,12 @@
+import 'react-native-reanimated';
+import 'react-native-gesture-handler';
 import React from "react";
-import { NavigationContainer } from "@react-navigation/native";
-import Main from "./app/index";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { AppProvider } from "./context/AppContext";
+import OwnerDashboard from "./app/OwnerDashboard";
 
 export default function App() {
-  return (
-    <NavigationContainer>
-      <Main />
-    </NavigationContainer>
-  );
+return (
+<GestureHandlerRootView style={{ flex: 1 }}> <AppProvider> <OwnerDashboard /> </AppProvider> </GestureHandlerRootView>
+);
 }

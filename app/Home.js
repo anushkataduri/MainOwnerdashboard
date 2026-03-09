@@ -33,7 +33,7 @@ export default function BuildingScreen() {
   );
   const baseCardWidth = availableWidth;
   const [sliderWidth, setSliderWidth] = useState(0);
-  const SPACING = 2;
+  const SPACING = 12;
   const cardWidth = (sliderWidth || baseCardWidth) - SPACING;
   const sliderRef = useRef(null);
   const sidebarRef = useRef(null);
@@ -1685,7 +1685,7 @@ const styles = StyleSheet.create({
   },
   contentRow: {
     flexDirection: "row",
-    gap: 6,
+    gap: 12,
     marginTop: 16,
   },
   sidebar: {
@@ -1746,11 +1746,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   card: {
-    padding: 10,
+    padding: 16,
     borderRadius: 16,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#a9a8a8",
+    borderColor: "#eee",
     elevation: 2,
     shadowColor: "#000",
     shadowOpacity: 0.08,
